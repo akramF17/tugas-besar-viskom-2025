@@ -121,7 +121,6 @@ elif source_option == "Video (Upload)":
             out = cv2.VideoWriter(output_path_temp, fourcc, fps, (width, height))
 
             # UI Progress
-            st.write("Sedang memproses video frame demi frame...")
             progress_bar = st.progress(0)
             frame_count = 0
 
@@ -148,8 +147,7 @@ elif source_option == "Video (Upload)":
             out.release()
             progress_bar.empty()
 
-            # Konversi FFMPEG (Agar bisa diputar di browser)
-            st.info("Melakukan encoding video akhir (H.264)...")
+            # Konversi FFMPEG
             os.system(f"ffmpeg -y -i {output_path_temp} -vcodec libx264 {output_path_final}")
 
             # Tampilkan Hasil
@@ -158,3 +156,4 @@ elif source_option == "Video (Upload)":
                 st.video(output_path_final)
             else:
                 st.error("Gagal melakukan encoding video. Pastikan ffmpeg terinstal.")
+
