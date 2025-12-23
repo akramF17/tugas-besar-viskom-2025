@@ -8,10 +8,10 @@ import numpy as np
 from PIL import Image
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
-# 1. Konfigurasi Halaman
+# Konfigurasi Halaman
 st.set_page_config(page_title="Deteksi Postur Tangan", layout="wide")
 
-# 2. Load Model
+# Load Model
 @st.cache_resource
 def load_model():
     model = YOLO('best.pt') 
@@ -50,18 +50,18 @@ if source_option == "Gambar (Upload)":
                 st.image(res_rgb, caption='Hasil Deteksi', use_container_width=True)
 
 # ==========================================
-# LOGIKA 2: VIDEO (Solusi Error MediaFileHandler)
+# LOGIKA 2: VIDEO
 # ==========================================
 elif source_option == "Video (Upload)":
     uploaded_file = st.file_uploader("Upload Video", type=['mp4', 'avi', 'mov'])
     
     if uploaded_file is not None:
-        # 1. Simpan file upload ke temp
+        # Simpan file upload ke temp
         tfile = tempfile.NamedTemporaryFile(delete=False) 
         tfile.write(uploaded_file.read())
         video_path = tfile.name
 
-        # 2. Siapkan VideoWriter
+        # Siapkan VideoWriter
         vf = cv2.VideoCapture(video_path)
         
         # Ambil properti video
@@ -79,7 +79,6 @@ elif source_option == "Video (Upload)":
         out = cv2.VideoWriter(output_path_temp, fourcc, fps, (width, height))
 
         # Progress bar
-        st.write("Sedang memproses video... Harap tunggu.")
         my_bar = st.progress(0)
         total_frames = int(vf.get(cv2.CAP_PROP_FRAME_COUNT))
         frame_count = 0
@@ -104,13 +103,10 @@ elif source_option == "Video (Upload)":
         out.release()
         my_bar.empty()
 
-        # 3. KONVERSI KE FORMAT BROWSER-FRIENDLY (FFMPEG)
-        # Langkah ini krusial agar video bisa diputar di Streamlit Cloud
-        # Kita menggunakan FFmpeg untuk encode ulang ke H.264
-        st.write("Melakukan encoding video agar kompatibel dengan browser...")
+        # Konversi ke FFMPEG
         os.system(f"ffmpeg -y -i {output_path_temp} -vcodec libx264 {output_path_final}")
 
-        # 4. Tampilkan Video Hasil
+        # Tampilkan Video Hasil
         if os.path.exists(output_path_final):
             st.success("Selesai! Berikut hasilnya:")
             st.video(output_path_final)
@@ -118,7 +114,7 @@ elif source_option == "Video (Upload)":
             st.error("Gagal melakukan encoding video.")
 
 # ==========================================
-# LOGIKA 3: WEBCAM (Perbaikan Error async)
+# LOGIKA 3: WEBCAM
 # ==========================================
 elif source_option == "Webcam (Real-Time Live)":
     st.write("Pastikan browser mengizinkan akses kamera.")
@@ -142,7 +138,7 @@ elif source_option == "Webcam (Real-Time Live)":
         mode=WebRtcMode.SENDRECV,
         rtc_configuration=rtc_configuration,
         video_frame_callback=video_frame_callback,
-        media_stream_constraints={"video": True, "audio": False},
-        # async_processing=True  <-- INI SUDAH DIHAPUS KARENA DEPRECATED
+        media_stream_constraints={"video": True, "audio": False}
     )
+
 
