@@ -2,17 +2,16 @@ import streamlit as st
 from ultralytics import YOLO
 import cv2
 import tempfile
+import os
+import av
 import numpy as np
 from PIL import Image
+from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
-# Library tambahan untuk Real-time Webcam
-from streamlit_webrtc import webrtc_streamer, VideoTransformerBase
-import av
+# 1. Konfigurasi Halaman
+st.set_page_config(page_title="Deteksi Bahasa Isyarat BISINDO", layout="wide")
 
-# Konfigurasi Halaman
-st.set_page_config(page_title="Deteksi Postur Tangan", layout="wide")
-
-# Load Model
+# 2. Load Model
 @st.cache_resource
 def load_model():
     model = YOLO('best.pt') 
@@ -23,95 +22,126 @@ try:
 except Exception as e:
     st.error(f"Error memuat model: {e}")
 
-# Sidebar & Judul
+# 3. Sidebar
 st.title("Proyek Visi Komputer: Deteksi Postur Tangan")
 st.sidebar.header("Konfigurasi")
-
-# Pilihan Input
 source_option = st.sidebar.selectbox(
     "Pilih Sumber Data",
     ("Gambar (Upload)", "Video (Upload)", "Webcam (Real-Time Live)")
 )
-
-# Slider Confidence
 conf_threshold = st.sidebar.slider("Confidence Threshold", 0.0, 1.0, 0.25)
 
+# ==========================================
 # LOGIKA 1: GAMBAR
+# ==========================================
 if source_option == "Gambar (Upload)":
     uploaded_file = st.file_uploader("Upload Gambar", type=['jpg', 'png', 'jpeg'])
-    
     if uploaded_file is not None:
         col1, col2 = st.columns(2)
-        
-        # Baca gambar
         image = Image.open(uploaded_file)
-        
         with col1:
             st.image(image, caption='Gambar Asli', use_container_width=True)
         
         if st.button("Deteksi Objek"):
-            # Prediksi
             res = model.predict(image, conf=conf_threshold)
-            
-            # Plot hasil (ini masih BGR)
             res_plotted = res[0].plot()
-            
-            # KONVERSI WARNA: BGR ke RGB
             res_rgb = cv2.cvtColor(res_plotted, cv2.COLOR_BGR2RGB)
-            
             with col2:
                 st.image(res_rgb, caption='Hasil Deteksi', use_container_width=True)
 
-# LOGIKA 2: VIDEO
+# ==========================================
+# LOGIKA 2: VIDEO (Solusi Error MediaFileHandler)
+# ==========================================
 elif source_option == "Video (Upload)":
     uploaded_file = st.file_uploader("Upload Video", type=['mp4', 'avi', 'mov'])
     
     if uploaded_file is not None:
-        # Simpan sementara
+        # 1. Simpan file upload ke temp
         tfile = tempfile.NamedTemporaryFile(delete=False) 
         tfile.write(uploaded_file.read())
+        video_path = tfile.name
+
+        # 2. Siapkan VideoWriter
+        vf = cv2.VideoCapture(video_path)
         
-        vf = cv2.VideoCapture(tfile.name)
+        # Ambil properti video
+        width = int(vf.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(vf.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        fps = vf.get(cv2.CAP_PROP_FPS)
         
-        # Placeholder untuk video
-        stframe = st.empty()
-        
+        # Path output sementara (.avi agar cepat ditulis OpenCV)
+        output_path_temp = os.path.join(tempfile.gettempdir(), "temp_output.avi")
+        # Path output final (.mp4 untuk browser)
+        output_path_final = os.path.join(tempfile.gettempdir(), "final_output.mp4")
+
+        # Codec MJPG untuk penulisan cepat sementara
+        fourcc = cv2.VideoWriter_fourcc(*'MJPG')
+        out = cv2.VideoWriter(output_path_temp, fourcc, fps, (width, height))
+
+        # Progress bar
+        st.write("Sedang memproses video... Harap tunggu.")
+        my_bar = st.progress(0)
+        total_frames = int(vf.get(cv2.CAP_PROP_FRAME_COUNT))
+        frame_count = 0
+
         while vf.isOpened():
             ret, frame = vf.read()
             if not ret:
                 break
             
-            # Prediksi
+            # Deteksi
             results = model.predict(frame, conf=conf_threshold)
             res_plotted = results[0].plot()
             
-            frame_rgb = cv2.cvtColor(res_plotted, cv2.COLOR_BGR2RGB)
-            stframe.image(frame_rgb, channels="RGB", use_container_width=True)
+            # Tulis ke video output
+            out.write(res_plotted)
+            
+            frame_count += 1
+            if total_frames > 0:
+                my_bar.progress(min(frame_count / total_frames, 1.0))
         
         vf.release()
+        out.release()
+        my_bar.empty()
 
-# LOGIKA 3: WEBCAM REAL-TIME (WebRTC)
+        # 3. KONVERSI KE FORMAT BROWSER-FRIENDLY (FFMPEG)
+        # Langkah ini krusial agar video bisa diputar di Streamlit Cloud
+        # Kita menggunakan FFmpeg untuk encode ulang ke H.264
+        st.write("Melakukan encoding video agar kompatibel dengan browser...")
+        os.system(f"ffmpeg -y -i {output_path_temp} -vcodec libx264 {output_path_final}")
+
+        # 4. Tampilkan Video Hasil
+        if os.path.exists(output_path_final):
+            st.success("Selesai! Berikut hasilnya:")
+            st.video(output_path_final)
+        else:
+            st.error("Gagal melakukan encoding video.")
+
+# ==========================================
+# LOGIKA 3: WEBCAM (Perbaikan Error async)
+# ==========================================
 elif source_option == "Webcam (Real-Time Live)":
-    st.write("Tunggu sebentar hingga webcam menyala. Pastikan browser mengizinkan akses kamera.")
+    st.write("Pastikan browser mengizinkan akses kamera.")
     
-    # Fungsi Callback untuk memproses setiap frame video secara langsung
     def video_frame_callback(frame):
-        # Konversi frame WebRTC ke format OpenCV (numpy array)
         img = frame.to_ndarray(format="bgr24")
         
-        # Lakukan Deteksi YOLO
+        # Deteksi
         results = model.predict(img, conf=conf_threshold)
-        
-        # Gambar kotak anotasi pada frame
         annotated_frame = results[0].plot()
         
-        # Kembalikan frame yang sudah dianotasi ke browser
         return av.VideoFrame.from_ndarray(annotated_frame, format="bgr24")
 
-    # Jalankan Streamer
+    # Konfigurasi STUN Server (Penting untuk Cloud)
+    rtc_configuration = RTCConfiguration(
+        {"iceServers": [{"urls": ["stun:stun.l.google.com:19302"]}]}
+    )
+
     webrtc_streamer(
-        key="deteksi-isyarat", 
+        key="deteksi-isyarat",
+        mode=WebRtcMode.SENDRECV,
+        rtc_configuration=rtc_configuration,
         video_frame_callback=video_frame_callback,
         media_stream_constraints={"video": True, "audio": False},
-        async_processing=True
+        # async_processing=True  <-- INI SUDAH DIHAPUS KARENA DEPRECATED
     )
