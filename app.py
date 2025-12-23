@@ -17,12 +17,11 @@ def load_model():
 
 try:
     model = load_model()
-    st.sidebar.success("Model berhasil dimuat!")
 except Exception as e:
     st.sidebar.error(f"Error memuat model: {e}")
 
 # Judul & Sidebar
-st.title("Proyek Visi Komputer: Deteksi Bahasa Isyarat")
+st.title("Proyek Visi Komputer: Deteksi Postur Tangan")
 st.sidebar.header("Pilih Metode Input")
 source_option = st.sidebar.selectbox(
     "Sumber Data",
@@ -81,4 +80,5 @@ elif source_option == "Webcam (Live Snapshot)":
         res_plotted = results[0].plot()
         
         # Tampilkan hasil (Convert BGR to RGB)
+
         st.image(cv2.cvtColor(res_plotted, cv2.COLOR_BGR2RGB), caption="Hasil Deteksi Webcam")
