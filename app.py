@@ -9,7 +9,7 @@ from PIL import Image
 from streamlit_webrtc import webrtc_streamer, WebRtcMode, RTCConfiguration
 
 # 1. Konfigurasi Halaman
-st.set_page_config(page_title="Deteksi Bahasa Isyarat BISINDO", layout="wide")
+st.set_page_config(page_title="Deteksi Postur Tangan", layout="wide")
 
 # 2. Load Model
 @st.cache_resource
@@ -145,3 +145,4 @@ elif source_option == "Webcam (Real-Time Live)":
         media_stream_constraints={"video": True, "audio": False},
         # async_processing=True  <-- INI SUDAH DIHAPUS KARENA DEPRECATED
     )
+
